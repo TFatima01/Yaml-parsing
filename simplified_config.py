@@ -3,7 +3,6 @@
 import sys
 import yaml
 from yaml.loader import SafeLoader
-from collections import OrderedDict
 import json
 import boto3
 import random, time

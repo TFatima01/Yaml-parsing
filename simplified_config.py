@@ -1,11 +1,12 @@
 # Importing Required Modules
-
 import sys
 import yaml
 from yaml.loader import SafeLoader
 import json
 import boto3
-import random, time
+from botocore.exceptions import NoCredentialsError
+import time
+from pathlib import Path
 
 ''' Checking the correct number of arguments are passed for the script 
     to run successfully'''
@@ -58,29 +59,32 @@ final_config = json.dumps(final_config)
 print(final_config)
 
 
-
-# Referred from https://keestalkstech.com/2021/03/python-utility-function-retry-with-exponential-backoff/
-
-def retry_with_backoff(fn, retries = 10, backoff_in_seconds = 600):
-  x = 0
-  while True:
-    try:
-      s3 = boto3.client('s3')
-      s3.put_object(
-           Body=json.dumps(final_config),
-           Bucket='your_bucket_name',
-           Key='your_key_here'
-      )
-    except:
-      if x == retries-1:
-        raise
-      else:
-        sleep = (backoff_in_seconds * 2 ** x + 
-                 random.uniform(0, 1))
-        time.sleep(sleep)
-        x += 1
-#retry_with_backoff(fn, retries = 10, backoff_in_seconds = 600)
+base = Path('/home/ec2-user/')  
+jsonpath = base / "config.json" 
+base.mkdir(exist_ok=True) #Create the directory if it does not exist and write json file:
+jsonpath.write_text(json.dumps(final_config))
+local_file=str(jsonpath)  
+s3_file='config_s3.json' 
+bucket='my-bucket1'  
 
 
-'''Note: We can also use the method s3.upload_file to upload the json file by provinding the path using the function below.
-   response = s3.upload_file(config_file.json,'my_bucket_name',json_data.json) '''
+# Function to Upload file to S3 bucket
+def upload_to_aws(local_file, bucket, s3_file):
+	s3 = boto3.client('s3')
+	print("Trying to upload")
+	s3.upload_file(local_file, bucket, s3_file)
+	print("Upload Successful")
+
+
+# Exponential Backoff Retry logic for Uploading
+def retry(func, max_tries=30):
+    for i in range(max_tries):
+        try:
+           time.sleep(20) 
+           func(local_file, bucket, s3_file)
+           break
+        except Exception:
+            continue
+
+# Function call for upload and retry
+retry(upload_to_aws)
